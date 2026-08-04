@@ -1,4 +1,4 @@
-name: Publish NovelWorld Mobile App
+name: Publish NovelWorld Single-File Mobile App
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   issues: write
 
 concurrency:
-  group: "novelworld-publish"
+  group: "novelworld-standalone-publish"
   cancel-in-progress: true
 
 jobs:
@@ -24,8 +24,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf _site site.b64 site.zip
-          mkdir -p _site
+          rm -rf _site site.b64 site.zip standalone
+          mkdir -p _site standalone
           cat \
             payload/part_00.b64 \
             payload/part_01.b64 \
@@ -40,29 +40,77 @@ jobs:
           test -f _site/index.html
           test -f _site/app.js
           test -f _site/styles.css
-          rm -f _site/_headers
-          touch _site/.nojekyll
 
-      - name: Publish files to public branch
+      - name: Build one self-contained HTML file
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import base64, re
+
+          root = Path('_site')
+          html = (root / 'index.html').read_text(encoding='utf-8')
+          css = (root / 'styles.css').read_text(encoding='utf-8')
+          js = (root / 'app.js').read_text(encoding='utf-8')
+
+          # A preview-hosted single file must not depend on external app assets.
+          html = re.sub(r'\s*<meta http-equiv="Content-Security-Policy"[^>]*>', '', html, flags=re.I)
+          html = re.sub(r'\s*<link rel="manifest"[^>]*>', '', html, flags=re.I)
+          html = re.sub(r'\s*<link rel="apple-touch-icon"[^>]*>', '', html, flags=re.I)
+
+          icon_path = root / 'icons' / 'icon-192.png'
+          if icon_path.exists():
+              icon = base64.b64encode(icon_path.read_bytes()).decode('ascii')
+              html = html.replace('</head>', f'\n  <link rel="apple-touch-icon" href="data:image/png;base64,{icon}">\n</head>')
+
+          html = re.sub(
+              r'<link rel="stylesheet" href="styles\.css">',
+              '<style>\n' + css + '\n</style>',
+              html,
+              flags=re.I,
+          )
+
+          # Disable service-worker registration on the preview host; everything is already inline.
+          js = js.replace(
+              "if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('./sw.js').catch(()=>{});",
+              "/* standalone build: no external service worker required */"
+          )
+          js = js.replace('</script', '<\\/script')
+          html = re.sub(
+              r'<script src="app\.js"></script>',
+              '<script>\n' + js + '\n</script>',
+              html,
+              flags=re.I,
+          )
+
+          out = Path('standalone/index.html')
+          out.write_text(html, encoding='utf-8')
+          assert out.stat().st_size > 100000
+          assert 'styles.css' not in html
+          assert 'src="app.js"' not in html
+          print(f'Built {out} ({out.stat().st_size} bytes)')
+          PY
+
+      - name: Publish standalone file
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          cd _site
+          cd standalone
           git init
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -b published
-          git add -A
-          git commit -m "Publish NovelWorld mobile app"
+          git checkout -b standalone
+          git add index.html
+          git commit -m "Publish self-contained NovelWorld mobile app"
           git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git push --force origin published
+          git push --force origin standalone
 
-      - name: Report published URL
+      - name: Report stable preview URL
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          URL="https://raw.githack.com/${GITHUB_REPOSITORY}/published/index.html"
-          gh issue create --repo "$GITHUB_REPOSITORY" --title "NOVELWORLD_PUBLISHED_OK" --body "URL: $URL"
+          URL="https://htmlpreview.github.io/?https://github.com/${GITHUB_REPOSITORY}/blob/standalone/index.html"
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "NOVELWORLD_STANDALONE_OK" --body "URL: $URL"
