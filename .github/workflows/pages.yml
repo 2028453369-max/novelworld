@@ -26,6 +26,7 @@ jobs:
         id: restore
         shell: bash
         run: |
+          set -euo pipefail
           rm -rf _site site.b64 site.zip
           mkdir -p _site
           cat \
@@ -33,15 +34,17 @@ jobs:
             payload/part_01.b64 \
             payload/part_02_03.b64 \
             payload/part_04_05.b64 \
+            payload/part_06_07.b64 \
+            payload/part_08_09.b64 \
             | tr -d '\r\n\t ' > site.b64
 
           B64_BYTES=$(wc -c < site.b64 | tr -d ' ')
-          echo "b64_bytes=$B64_BYTES" >> "$GITHUB_OUTPUT"
+          echo "Base64 bytes: $B64_BYTES"
           test "$B64_BYTES" = "75092"
 
           base64 --decode site.b64 > site.zip
           ZIP_SHA=$(sha256sum site.zip | cut -d' ' -f1)
-          echo "zip_sha=$ZIP_SHA" >> "$GITHUB_OUTPUT"
+          echo "ZIP SHA256: $ZIP_SHA"
           test "$ZIP_SHA" = "30b4bfb047f0f42f4bbba385942d233b314d7b8bab4e100220181d3df76754df"
 
           unzip -q site.zip -d _site
@@ -52,14 +55,12 @@ jobs:
           touch _site/.nojekyll
 
       - name: Configure Pages
-        id: configure
         uses: actions/configure-pages@v5
         with:
           enablement: true
 
       - name: Upload Pages artifact
-        id: upload
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: _site
 
@@ -74,21 +75,22 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
 
-      - name: Report successful deployment
-        if: success()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
-        run: gh issue create --title "NOVELWORLD_DEPLOYMENT_OK" --body "Deployment completed successfully. URL: $PAGE_URL"
-
-  report-failure:
-    if: failure()
-    needs: [build, deploy]
+  report:
+    if: always()
     runs-on: ubuntu-latest
+    needs: [build, deploy]
     steps:
-      - name: Report failure
+      - name: Report deployment result
         env:
           GH_TOKEN: ${{ github.token }}
           BUILD_RESULT: ${{ needs.build.result }}
           DEPLOY_RESULT: ${{ needs.deploy.result }}
-        run: gh issue create --repo "${{ github.repository }}" --title "NOVELWORLD_DEPLOYMENT_FAILED_AFTER_FIX" --body "Build result: $BUILD_RESULT; Deploy result: $DEPLOY_RESULT"
+        shell: bash
+        run: |
+          if [ "$BUILD_RESULT" = "success" ] && [ "$DEPLOY_RESULT" = "success" ]; then
+            TITLE="NOVELWORLD_DEPLOYMENT_OK"
+          else
+            TITLE="NOVELWORLD_DEPLOYMENT_FAILED"
+          fi
+          BODY=$(printf 'Build: %s\nDeploy: %s\nURL: https://2028453369-max.github.io/novelworld/\nCommit: %s\n' "$BUILD_RESULT" "$DEPLOY_RESULT" "$GITHUB_SHA")
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY"
