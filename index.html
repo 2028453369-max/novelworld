@@ -2,68 +2,21 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
-  <meta name="theme-color" content="#7567f8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
+  <meta name="theme-color" content="#8d7cf7">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="世界观工坊">
   <meta name="format-detection" content="telephone=no">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; connect-src 'self'; img-src 'self' data: blob:; media-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
-  <title>世界观工坊 · 手机版</title>
+  <title>世界观工坊</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icons/icon.svg">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div id="app" class="app">
-    <header class="app-header" id="appHeader">
-      <button class="project-chip" id="projectSwitcher" aria-label="切换作品">
-        <span class="project-orb" id="projectOrb">世</span>
-        <span class="project-copy"><b id="projectTitle">未命名世界</b><small id="projectSubtitle">私人创作空间</small></span>
-        <span class="chevron">⌄</span>
-      </button>
-      <div class="header-actions">
-        <button class="round-btn" id="searchOpen" aria-label="搜索">⌕</button>
-        <button class="round-btn" id="inboxOpen" aria-label="提醒">◌<span class="badge-dot hidden" id="reminderDot"></span></button>
-      </div>
-    </header>
-
-    <main id="mainView" class="main-view" aria-live="polite"></main>
-
-    <button id="floatingCreate" class="floating-create" aria-label="新建">＋</button>
-
-    <nav class="bottom-nav" aria-label="主导航">
-      <button class="nav-tab active" data-route="home"><span>⌂</span><b>首页</b></button>
-      <button class="nav-tab" data-route="library"><span>▦</span><b>设定</b></button>
-      <button class="nav-tab" data-route="writing"><span>✎</span><b>创作</b></button>
-      <button class="nav-tab" data-route="visual"><span>⌘</span><b>图谱</b></button>
-      <button class="nav-tab" data-route="settings"><span>◉</span><b>我的</b></button>
-    </nav>
-  </div>
-
-  <div class="overlay hidden" id="overlay"></div>
-
-  <section class="bottom-sheet hidden" id="sheet" role="dialog" aria-modal="true">
-    <div class="sheet-handle"></div>
-    <header class="sheet-head">
-      <div><h2 id="sheetTitle">新建</h2><p id="sheetHint"></p></div>
-      <button class="round-btn" id="sheetClose" aria-label="关闭">×</button>
-    </header>
-    <div id="sheetBody" class="sheet-body"></div>
-    <footer id="sheetFooter" class="sheet-footer hidden"></footer>
-  </section>
-
-  <section class="full-panel hidden" id="fullPanel" role="dialog" aria-modal="true">
-    <header class="full-panel-head">
-      <button class="round-btn" id="fullBack" aria-label="返回">‹</button>
-      <div class="full-title"><b id="fullTitle">详情</b><small id="fullSubtitle"></small></div>
-      <button class="round-btn" id="fullAction" aria-label="更多">•••</button>
-    </header>
-    <div class="full-panel-body" id="fullBody"></div>
-  </section>
-
-  <input id="globalFileInput" class="hidden" type="file">
-  <div class="toast hidden" id="toast"></div>
+  <div id="app"></div>
+  <input id="filePicker" type="file" hidden>
   <script src="app.js"></script>
 </body>
 </html>
