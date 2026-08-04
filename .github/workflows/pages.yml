@@ -32,7 +32,7 @@ jobs:
           root = Path('.')
           html = (root / 'index.html').read_text(encoding='utf-8')
           css = (root / 'styles.css').read_text(encoding='utf-8')
-          scripts = ['modules.js','core.js','views.js','forms.js','visual.js','editor.js','actions.js','links.js']
+          scripts = ['modules.js','core.js','views.js','forms.js','visual.js','editor.js','actions.js','links.js','map-links.js']
 
           html = re.sub(r'\s*<meta http-equiv="Content-Security-Policy"[^>]*>', '', html, flags=re.I)
           html = re.sub(r'\s*<link rel="manifest"[^>]*>', '', html, flags=re.I)
@@ -49,11 +49,16 @@ jobs:
               if name == 'core.js':
                   js = js.replace("if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});", "/* standalone build */")
               js = js.replace('</script', '<\\/script')
-              html = re.sub(rf'<script src="{re.escape(name)}"></script>', lambda _m, js=js: '<script>\n'+js+'\n</script>', html, flags=re.I)
+              tag = f'<script src="{name}"></script>'
+              built = '<script>\n'+js+'\n</script>'
+              if tag in html:
+                  html = html.replace(tag, built)
+              else:
+                  html = html.replace('</body>', built+'\n</body>')
 
           out = Path('standalone/index.html')
           out.write_text(html, encoding='utf-8')
-          assert out.stat().st_size > 90000
+          assert out.stat().st_size > 100000
           assert 'styles.css' not in html
           for name in scripts:
               assert f'src="{name}"' not in html
@@ -82,7 +87,7 @@ jobs:
         shell: bash
         run: |
           URL="https://htmlpreview.github.io/?https://github.com/${GITHUB_REPOSITORY}/blob/standalone/index.html"
-          gh issue create --repo "$GITHUB_REPOSITORY" --title "NOVELWORLD_LINKED_READY" --body "URL: $URL\nCommit: $GITHUB_SHA"
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "NOVELWORLD_MAP_LINKED_READY" --body "URL: $URL\nCommit: $GITHUB_SHA"
 
       - name: Report failure
         if: failure()
@@ -90,4 +95,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          gh issue create --repo "$GITHUB_REPOSITORY" --title "NOVELWORLD_LINKED_FAILED" --body "Commit: $GITHUB_SHA"
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "NOVELWORLD_MAP_LINKED_FAILED" --body "Commit: $GITHUB_SHA"
