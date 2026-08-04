@@ -1,4 +1,4 @@
-name: Publish NovelWorld Single-File Mobile App
+name: Publish NovelWorld Mobile App
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   issues: write
 
 concurrency:
-  group: "novelworld-standalone-publish"
+  group: novelworld-mobile-publish
   cancel-in-progress: true
 
 jobs:
@@ -20,78 +20,47 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Restore complete app
+      - name: Build self-contained mobile app
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf _site site.b64 site.zip standalone
-          mkdir -p _site standalone
-          cat \
-            payload/part_00.b64 \
-            payload/part_01.b64 \
-            payload/part_02_03.b64 \
-            payload/part_04_05.b64 \
-            payload/part_06_07.b64 \
-            payload/part_08_09.b64 \
-            | tr -d '\r\n\t ' > site.b64
-          base64 --decode site.b64 > site.zip
-          unzip -tq site.zip
-          unzip -q site.zip -d _site
-          test -f _site/index.html
-          test -f _site/app.js
-          test -f _site/styles.css
-
-      - name: Build one self-contained HTML file
-        shell: bash
-        run: |
+          mkdir -p standalone
           python - <<'PY'
           from pathlib import Path
           import base64, re
 
-          root = Path('_site')
+          root = Path('.')
           html = (root / 'index.html').read_text(encoding='utf-8')
           css = (root / 'styles.css').read_text(encoding='utf-8')
-          js = (root / 'app.js').read_text(encoding='utf-8')
+          scripts = ['modules.js','core.js','views.js','forms.js','visual.js','editor.js','actions.js']
 
           html = re.sub(r'\s*<meta http-equiv="Content-Security-Policy"[^>]*>', '', html, flags=re.I)
           html = re.sub(r'\s*<link rel="manifest"[^>]*>', '', html, flags=re.I)
           html = re.sub(r'\s*<link rel="apple-touch-icon"[^>]*>', '', html, flags=re.I)
+          html = re.sub(r'<link rel="stylesheet" href="styles\.css">', lambda _: '<style>\n'+css+'\n</style>', html, flags=re.I)
 
-          icon_path = root / 'icons' / 'icon-192.png'
-          if icon_path.exists():
-              icon = base64.b64encode(icon_path.read_bytes()).decode('ascii')
-              html = html.replace('</head>', f'\n  <link rel="apple-touch-icon" href="data:image/png;base64,{icon}">\n</head>')
+          icon = root / 'icons' / 'icon.svg'
+          if icon.exists():
+              data = base64.b64encode(icon.read_bytes()).decode('ascii')
+              html = html.replace('</head>', f'\n<link rel="apple-touch-icon" href="data:image/svg+xml;base64,{data}">\n</head>')
 
-          html = re.sub(
-              r'<link rel="stylesheet" href="styles\.css">',
-              lambda _m: '<style>\n' + css + '\n</style>',
-              html,
-              flags=re.I,
-          )
-
-          js = js.replace(
-              "if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('./sw.js').catch(()=>{});",
-              "/* standalone build: no external service worker required */"
-          )
-          js = js.replace('</script', '<\\/script')
-          html = re.sub(
-              r'<script src="app\.js"></script>',
-              lambda _m: '<script>\n' + js + '\n</script>',
-              html,
-              flags=re.I,
-          )
+          for name in scripts:
+              js = (root / name).read_text(encoding='utf-8')
+              if name == 'core.js':
+                  js = js.replace("if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});", "/* standalone build */")
+              js = js.replace('</script', '<\\/script')
+              html = re.sub(rf'<script src="{re.escape(name)}"></script>', lambda _m, js=js: '<script>\n'+js+'\n</script>', html, flags=re.I)
 
           out = Path('standalone/index.html')
           out.write_text(html, encoding='utf-8')
-          assert out.stat().st_size > 100000
-          assert 'href="styles.css"' not in html
-          assert 'src="app.js"' not in html
-          assert '<style>' in html
-          assert '<script>' in html
+          assert out.stat().st_size > 70000
+          assert 'styles.css' not in html
+          for name in scripts:
+              assert f'src="{name}"' not in html
           print(f'Built {out} ({out.stat().st_size} bytes)')
           PY
 
-      - name: Publish standalone file
+      - name: Publish standalone branch
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -103,22 +72,22 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b standalone
           git add index.html
-          git commit -m "Publish self-contained NovelWorld mobile app"
+          git commit -m "Publish latest NovelWorld mobile app"
           git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push --force origin standalone
 
-      - name: Report stable preview URL
+      - name: Report mobile URL
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           URL="https://htmlpreview.github.io/?https://github.com/${GITHUB_REPOSITORY}/blob/standalone/index.html"
-          gh issue create --repo "$GITHUB_REPOSITORY" --title "NOVELWORLD_STANDALONE_OK" --body "URL: $URL"
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "NOVELWORLD_MOBILE_READY" --body "URL: $URL\nCommit: $GITHUB_SHA"
 
-      - name: Report publishing failure
+      - name: Report failure
         if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          gh issue create --repo "$GITHUB_REPOSITORY" --title "NOVELWORLD_STANDALONE_FAILED" --body "Commit: $GITHUB_SHA. The single-file publishing workflow failed."
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "NOVELWORLD_MOBILE_FAILED" --body "Commit: $GITHUB_SHA"
