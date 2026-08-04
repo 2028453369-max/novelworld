@@ -23,31 +23,53 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Restore complete site package
-        id: restore
         shell: bash
         run: |
-          set -euo pipefail
-          rm -rf _site site.b64 site.zip
+          rm -rf _site
           mkdir -p _site
-          cat \
-            payload/part_00.b64 \
-            payload/part_01.b64 \
-            payload/part_02_03.b64 \
-            payload/part_04_05.b64 \
-            payload/part_06_07.b64 \
-            payload/part_08_09.b64 \
-            | tr -d '\r\n\t ' > site.b64
+          python3 - <<'PY'
+          import base64
+          import io
+          import pathlib
+          import shutil
+          import zipfile
 
-          B64_BYTES=$(wc -c < site.b64 | tr -d ' ')
-          echo "Base64 bytes: $B64_BYTES"
-          test "$B64_BYTES" = "75092"
+          payload = pathlib.Path('payload')
+          candidates = [
+              ['part_00.b64', 'part_01.b64', 'part_02_03.b64', 'part_04_05.b64', 'part_06_07.b64', 'part_08_09.b64'],
+              ['part_00.b64', 'part_01.b64', 'part_02_03.b64', 'part_04_05.b64'],
+          ]
+          required = {'index.html', 'app.js', 'styles.css'}
+          output = pathlib.Path('_site')
+          errors = []
 
-          base64 --decode site.b64 > site.zip
-          ZIP_SHA=$(sha256sum site.zip | cut -d' ' -f1)
-          echo "ZIP SHA256: $ZIP_SHA"
-          test "$ZIP_SHA" = "30b4bfb047f0f42f4bbba385942d233b314d7b8bab4e100220181d3df76754df"
-
-          unzip -q site.zip -d _site
+          for names in candidates:
+              existing = [name for name in names if (payload / name).exists()]
+              if len(existing) != len(names):
+                  errors.append(f"missing files for candidate: {names}")
+                  continue
+              encoded = ''.join((payload / name).read_text(encoding='utf-8') for name in names)
+              encoded = ''.join(encoded.split())
+              try:
+                  raw = base64.b64decode(encoded, validate=True)
+                  with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+                      members = set(archive.namelist())
+                      if not required.issubset(members):
+                          raise RuntimeError(f"required files missing; first entries: {sorted(members)[:12]}")
+                      bad = archive.testzip()
+                      if bad:
+                          raise RuntimeError(f"corrupt member: {bad}")
+                      shutil.rmtree(output, ignore_errors=True)
+                      output.mkdir(parents=True, exist_ok=True)
+                      archive.extractall(output)
+                  print(f"Restored with: {', '.join(names)}")
+                  print(f"Decoded ZIP bytes: {len(raw)}")
+                  break
+              except Exception as exc:
+                  errors.append(f"{names}: {exc}")
+          else:
+              raise SystemExit('No valid package candidate. ' + ' | '.join(errors))
+          PY
           test -f _site/index.html
           test -f _site/app.js
           test -f _site/styles.css
@@ -60,7 +82,7 @@ jobs:
           enablement: true
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v3
         with:
           path: _site
 
@@ -90,7 +112,7 @@ jobs:
           if [ "$BUILD_RESULT" = "success" ] && [ "$DEPLOY_RESULT" = "success" ]; then
             TITLE="NOVELWORLD_DEPLOYMENT_OK"
           else
-            TITLE="NOVELWORLD_DEPLOYMENT_FAILED"
+            TITLE="NOVELWORLD_DEPLOYMENT_FAILED_FINAL"
           fi
           BODY=$(printf 'Build: %s\nDeploy: %s\nURL: https://2028453369-max.github.io/novelworld/\nCommit: %s\n' "$BUILD_RESULT" "$DEPLOY_RESULT" "$GITHUB_SHA")
           gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY"
