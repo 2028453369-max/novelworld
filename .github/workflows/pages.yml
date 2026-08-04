@@ -26,6 +26,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Rebuild complete app
+        id: rebuild
         shell: bash
         run: |
           set -euo pipefail
@@ -39,11 +40,13 @@ jobs:
           test -f public/styles.css
 
       - name: Configure Pages
+        id: configure
         uses: actions/configure-pages@v5
         with:
           enablement: true
 
       - name: Upload site
+        id: upload
         uses: actions/upload-pages-artifact@v3
         with:
           path: public
@@ -56,12 +59,22 @@ jobs:
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
+          REBUILD_OUTCOME: ${{ steps.rebuild.outcome }}
+          CONFIGURE_OUTCOME: ${{ steps.configure.outcome }}
+          UPLOAD_OUTCOME: ${{ steps.upload.outcome }}
           DEPLOY_OUTCOME: ${{ steps.deployment.outcome }}
           PAGE_URL: ${{ steps.deployment.outputs.page_url }}
         run: |
+          cat > deployment-report.txt <<EOF
+          Rebuild: $REBUILD_OUTCOME
+          Configure Pages: $CONFIGURE_OUTCOME
+          Upload: $UPLOAD_OUTCOME
+          Deploy: $DEPLOY_OUTCOME
+          URL: $PAGE_URL
+          EOF
           if [ "$DEPLOY_OUTCOME" = "success" ]; then
-            gh issue create --title "NOVELWORLD_DEPLOYMENT_OK" --body "Deployment completed successfully. URL: $PAGE_URL"
+            gh issue create --title "NOVELWORLD_DEPLOYMENT_OK" --body-file deployment-report.txt
           else
-            gh issue create --title "NOVELWORLD_DEPLOYMENT_FAILED" --body "Deployment did not complete successfully. Check the latest Actions run."
+            gh issue create --title "NOVELWORLD_DEPLOYMENT_FAILED_DETAILS" --body-file deployment-report.txt
             exit 1
           fi
