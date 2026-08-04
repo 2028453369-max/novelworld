@@ -1,0 +1,16 @@
+{
+  "name": "世界观工坊 · 私人创作空间",
+  "short_name": "世界观工坊",
+  "description": "离线管理角色、世界观、地图、关系图谱、时间线与小说稿件。",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f7f5ff",
+  "theme_color": "#7567f8",
+  "icons": [
+    {"src":"icons/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any maskable"},
+    {"src":"icons/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
+  ]
+}
