@@ -1,4 +1,4 @@
-name: Publish NovelWorld Mobile App
+name: Deploy NovelWorld to GitHub Pages
 
 on:
   push:
@@ -6,97 +6,34 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  issues: write
+  contents: read
+  pages: write
+  id-token: write
 
 concurrency:
-  group: novelworld-mobile-publish
+  group: github-pages
   cancel-in-progress: true
 
 jobs:
-  publish:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout source
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build self-contained mobile app
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p standalone
-          python - <<'PY'
-          from pathlib import Path
-          import base64, re
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
-          root = Path('.')
-          html = (root / 'index.html').read_text(encoding='utf-8')
-          css = (root / 'styles.css').read_text(encoding='utf-8')
-          rebuild_css = (root / 'rebuild.css').read_text(encoding='utf-8')
-          scripts = ['modules.js','core.js','views.js','forms.js','visual.js','editor.js','actions.js','links.js','rebuild.js']
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
 
-          html = re.sub(r'\s*<meta http-equiv="Content-Security-Policy"[^>]*>', '', html, flags=re.I)
-          html = re.sub(r'\s*<link rel="manifest"[^>]*>', '', html, flags=re.I)
-          html = re.sub(r'\s*<link rel="apple-touch-icon"[^>]*>', '', html, flags=re.I)
-          html = re.sub(r'<link rel="stylesheet" href="styles\.css">', lambda _: '<style>\n'+css+'\n'+rebuild_css+'\n</style>', html, flags=re.I)
-          html = re.sub(r'\s*<link rel="stylesheet" href="rebuild\.css">', '', html, flags=re.I)
-
-          icon = root / 'icons' / 'icon.svg'
-          if icon.exists():
-              data = base64.b64encode(icon.read_bytes()).decode('ascii')
-              html = html.replace('</head>', f'\n<link rel="apple-touch-icon" href="data:image/svg+xml;base64,{data}">\n</head>')
-
-          for name in scripts:
-              js = (root / name).read_text(encoding='utf-8')
-              if name == 'core.js':
-                  js = js.replace("if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});", "/* standalone build */")
-              js = js.replace('</script', '<\\/script')
-              tag = f'<script src="{name}"></script>'
-              built = '<script>\n'+js+'\n</script>'
-              if tag not in html:
-                  raise RuntimeError(f'Missing script tag: {name}')
-              html = html.replace(tag, built)
-
-          out = Path('standalone/index.html')
-          out.write_text(html, encoding='utf-8')
-          assert out.stat().st_size > 130000
-          assert 'href="styles.css"' not in html
-          assert 'href="rebuild.css"' not in html
-          for name in scripts:
-              assert f'src="{name}"' not in html
-          assert '关系网络' in html
-          assert '横向条状' in html
-          print(f'Built {out} ({out.stat().st_size} bytes)')
-          PY
-
-      - name: Publish standalone branch
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd standalone
-          git init
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -b standalone
-          git add index.html
-          git commit -m "Publish rebuilt NovelWorld mobile app"
-          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git push --force origin standalone
-
-      - name: Report mobile URL
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          URL="https://htmlpreview.github.io/?https://github.com/${GITHUB_REPOSITORY}/blob/standalone/index.html"
-          gh issue create --repo "$GITHUB_REPOSITORY" --title "NOVELWORLD_REBUILD_READY" --body "URL: $URL\nCommit: $GITHUB_SHA"
-
-      - name: Report failure
-        if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          gh issue create --repo "$GITHUB_REPOSITORY" --title "NOVELWORLD_REBUILD_FAILED" --body "Commit: $GITHUB_SHA"
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
